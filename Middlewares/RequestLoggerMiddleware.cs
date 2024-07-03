@@ -5,25 +5,22 @@ namespace Netcorext.Logging.AspNetCoreLogger;
 
 public class RequestLoggerMiddleware
 {
+    private const string REQUEST_INFO_FORMAT = "Request Information {Protocol} {Method} {Scheme}://{Host}{PathBase}{Path}{QueryString} - {ContentType} {ContentLength}\nHeaders:\n{Headers}\nContent:\n{Content}";
+
     private readonly RequestDelegate _next;
     private readonly ILogger _logger;
     private readonly RecyclableMemoryStreamManager _recyclableMemoryStreamManager;
 
-    public static class EventIds
-    {
-        public static readonly EventId RequestInfo = new EventId(10000, "RequestInfo");
-    }
-
     public RequestLoggerMiddleware(RequestDelegate next, ILoggerFactory loggerFactory)
     {
         _next = next;
-        _logger = loggerFactory.CreateLogger<RequestLoggerMiddleware>();
+        _logger = loggerFactory.CreateLogger($"Microsoft.AspNetCore.Hosting.Diagnostics.RequestLogger");
         _recyclableMemoryStreamManager = new RecyclableMemoryStreamManager();
     }
 
     public async Task Invoke(HttpContext context)
     {
-        if (!_logger.IsEnabled(LogLevel.Trace))
+        if (!_logger.IsEnabled(LogLevel.Information))
         {
             await _next(context);
 
@@ -49,10 +46,20 @@ public class RequestLoggerMiddleware
             context.Request.Body.Seek(0, SeekOrigin.Begin);
         }
 
-        _logger.LogTrace(EventIds.RequestInfo,
-                         $"Request Information: {context.Request.Protocol} {context.Request.Method} {context.Request.Scheme}://{context.Request.Host}{context.Request.Path}{context.Request.QueryString}{Environment.NewLine}" +
-                         $"Headers:{Environment.NewLine}{GetHeaders(context.Request.Headers)}" +
-                         $"Content:{Environment.NewLine}{content}");
+        _logger.Log(LogLevel.Information,
+                    LoggerEventIds.RequestInfo,
+                    REQUEST_INFO_FORMAT,
+                    context.Request.Protocol,
+                    context.Request.Method,
+                    context.Request.Scheme,
+                    context.Request.Host,
+                    context.Request.PathBase,
+                    context.Request.Path,
+                    context.Request.QueryString,
+                    context.Request.ContentType,
+                    context.Request.ContentLength,
+                    GetHeaders(context.Request.Headers),
+                    content);
 
         await _next(context);
     }

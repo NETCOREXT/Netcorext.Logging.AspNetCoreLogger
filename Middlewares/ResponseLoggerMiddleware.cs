@@ -5,26 +5,22 @@ namespace Netcorext.Logging.AspNetCoreLogger;
 
 public class ResponseLoggerMiddleware
 {
+    private const string RESPONSE_INFO_FORMAT = "Response Information {Protocol} {Method} {Scheme}://{Host}{PathBase}{Path}{QueryString} - {StatusCode} {ContentLength} {ContentType}\nHeaders:\n{Headers}\nContent:\n{Content}";
+
     private readonly RequestDelegate _next;
     private readonly ILogger _logger;
     private readonly RecyclableMemoryStreamManager _recyclableMemoryStreamManager;
 
-    public static class EventIds
-    {
-        public static readonly EventId RequestInfo = new EventId(10000, "RequestInfo");
-        public static readonly EventId ResponseInfo = new EventId(10001, "ResponseInfo");
-    }
-
     public ResponseLoggerMiddleware(RequestDelegate next, ILoggerFactory loggerFactory)
     {
         _next = next;
-        _logger = loggerFactory.CreateLogger<ResponseLoggerMiddleware>();
+        _logger = loggerFactory.CreateLogger($"Microsoft.AspNetCore.Hosting.Diagnostics.ResponseLogger");
         _recyclableMemoryStreamManager = new RecyclableMemoryStreamManager();
     }
 
     public async Task Invoke(HttpContext context)
     {
-        if (!_logger.IsEnabled(LogLevel.Trace))
+        if (!_logger.IsEnabled(LogLevel.Information))
         {
             await _next(context);
 
@@ -62,10 +58,21 @@ public class ResponseLoggerMiddleware
 
         logContent:
 
-        _logger.LogTrace(EventIds.ResponseInfo,
-                         $"Response Information:{Environment.NewLine}" +
-                         $"Headers:{Environment.NewLine}{GetHeaders(context.Response.Headers)}" +
-                         $"Content:{Environment.NewLine}{content}");
+        _logger.Log(LogLevel.Information,
+                    LoggerEventIds.ResponseInfo,
+                    RESPONSE_INFO_FORMAT,
+                    context.Request.Protocol,
+                    context.Request.Method,
+                    context.Request.Scheme,
+                    context.Request.Host,
+                    context.Request.PathBase,
+                    context.Request.Path,
+                    context.Request.QueryString,
+                    context.Response.StatusCode,
+                    context.Response.ContentLength,
+                    context.Response.ContentType,
+                    GetHeaders(context.Response.Headers),
+                    content);
     }
 
     private static async Task<string> ReadStreamAsync(Stream stream, bool enableDispose = true)
