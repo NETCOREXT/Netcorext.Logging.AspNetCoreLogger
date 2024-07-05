@@ -29,34 +29,20 @@ public class ResponseLoggerMiddleware
 
         var content = $"Content is empty or Content-Type ({context.Response.ContentType}) is not support log.";
 
-        if (IsGrpc(context))
-        {
-            await _next(context);
-
-            goto logContent;
-        }
-
-        var originalBodyStream = context.Response.Body;
-        var responseStream = _recyclableMemoryStreamManager.GetStream();
-
-        context.Response.Body = responseStream;
-
-        await _next(context);
-
         if (context.Response.ContentType != null
          && (context.Response.ContentType.Contains("text/")
           || context.Response.ContentType.Contains("application/json")
           || context.Response.ContentType.Contains("application/xml")
           || context.Response.ContentType.Contains("application/x-www-form-urlencoded")))
         {
+            var responseStream = _recyclableMemoryStreamManager.GetStream();
+
+            await context.Response.Body.CopyToAsync(responseStream);
+
             content = await ReadStreamAsync(responseStream, false);
+
+            context.Response.Body.Seek(0, SeekOrigin.Begin);
         }
-
-        await responseStream.CopyToAsync(originalBodyStream);
-
-        context.Response.Body = originalBodyStream;
-
-        logContent:
 
         _logger.Log(LogLevel.Information,
                     LoggerEventIds.ResponseInfo,
@@ -73,6 +59,8 @@ public class ResponseLoggerMiddleware
                     context.Response.ContentType,
                     GetHeaders(context.Response.Headers),
                     content);
+
+        await _next(context);
     }
 
     private static async Task<string> ReadStreamAsync(Stream stream, bool enableDispose = true)
